@@ -1,6 +1,6 @@
 {
   "name": "simple-crud",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Simple crud starting with MongoDB",
   "main": "index.js",
   "scripts": {
