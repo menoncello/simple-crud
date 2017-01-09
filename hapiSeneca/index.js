@@ -9,7 +9,7 @@ function hapiSeneca(server, host, role) {
 		host: host.host,
 		port: host.port,
 		pin: {
-			role: 'application',
+			role: role,
 		},
 	});
 
