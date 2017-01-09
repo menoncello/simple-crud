@@ -2,7 +2,17 @@ const seneca = require('seneca')();
 
 module.exports = hapiSeneca;
 
-function hapiSeneca(server, role) {
+function hapiSeneca(server, host, role) {
+
+	seneca.client({
+		type: 'tcp',
+		host: host.host,
+		port: host.port,
+		pin: {
+			role: 'application',
+		},
+	});
+
 	server.route({
 		method: 'POST',
 		path: '/' + role,
