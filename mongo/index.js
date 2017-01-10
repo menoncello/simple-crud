@@ -12,156 +12,224 @@ function MongoCrud(url, collection, options) {
 	crud.url = url;
 	crud.collection = collection;
 	crud.options = options || {};
+
 	crud.save = save;
 	crud.delete = remove;
 	crud.get = get;
 	crud.list = list;
 
-	function save(object, callback) {
-		if (object.model._id) {
-			update(object, callback);
+	crud.authorize = authorize;
+
+	function authorize(method, object, user, callback) {
+		if (!(typeof(crud.options.authorize) === 'function')) {
+			callback(null, true);
+			return;
 		}
-		else {
-			create(object, callback);
-		}
+
+		crud.options.authorize(crud.collection, method, object, user, callback);
 	}
 
-	function create(object, callback) {
-		const model = object.model;
-		model._id = (crud.options.idPrefix ? crud.options.idPrefix : '') + uuidV4();
-		if (typeof(crud.options.createValidation) === 'function') {
-			crud.options.createValidation(model, validated);
-		}
-		else {
-			validated();
-		}
-
-		function validated(err, inconsistencies) {
+	function save(object, user, callback) {
+		crud.authorize('save', object, user, function authorized(err, passed) {
 			if (err) {
 				callback(err);
 				return;
 			}
 
-			if (!inconsistencies || inconsistencies.length === 0) {
-				MongoClient.connect(crud.url, function listConnected(connectErr, db) {
-					if (connectErr) {
-						callback(connectErr);
-						return;
-					}
-
-					db.collection(crud.collection).insertOne(model, {}, function inserted(dbErr) {
-						if (dbErr) {
-							callback(dbErr);
-							return;
-						}
-						callback(null, {
-							response: true,
-							savedId: model._id,
-						});
-					});
+			if (!passed) {
+				callback({
+					msg: 'not authorized',
 				});
+				return;
+			}
+
+			if (object.model._id) {
+				update(object, callback);
 			}
 			else {
-				callback(null, {
-					response: false,
-					inconsistencies: inconsistencies,
-				});
+				create(object, callback);
 			}
-		}
+		});
 	}
 
-	function update(object, callback) {
-		const model = object.model;
-
-		if (typeof(crud.options.updateValidation) === 'function') {
-			crud.options.updateValidation(model, validated);
-		}
-		else {
-			validated();
-		}
-
-		function validated(err, inconsistencies) {
+	function create(object, user, callback) {
+		crud.authorize('save', object, user, function authorized(err, passed) {
 			if (err) {
 				callback(err);
 				return;
 			}
 
-			if (!inconsistencies || inconsistencies.length === 0) {
-				MongoClient.connect(crud.url, function listConnected(connectErr, db) {
-					if (connectErr) {
-						callback(connectErr);
-						return;
-					}
-
-					db.collection(crud.collection).updateOne({
-						_id: model._id,
-					}, model, function inserted(dbErr, dbRes) {
-						if (dbErr) {
-							callback(dbErr);
-							return;
-						}
-						callback(null, {
-							response: dbRes.result.n === 1,
-						});
-					});
+			if (!passed) {
+				callback({
+					msg: 'not authorized',
 				});
+				return;
+			}
+
+			const model = object.model;
+			model._id = (crud.options.idPrefix ? crud.options.idPrefix + '-' : '') + uuidV4();
+			if (typeof(crud.options.createValidation) === 'function') {
+				crud.options.createValidation(model, validated);
 			}
 			else {
-				callback(null, {
-					response: false,
-					inconsistencies: inconsistencies,
-				});
+				validated();
 			}
-		}
+
+			function validated(errValidation, inconsistencies) {
+				if (errValidation) {
+					callback(errValidation);
+					return;
+				}
+
+				if (!inconsistencies || inconsistencies.length === 0) {
+					MongoClient.connect(crud.url, function listConnected(connectErr, db) {
+						if (connectErr) {
+							callback(connectErr);
+							return;
+						}
+
+						db.collection(crud.collection).insertOne(model, {}, function inserted(dbErr) {
+							if (dbErr) {
+								callback(dbErr);
+								return;
+							}
+							callback(null, {
+								response: true,
+								savedId: model._id,
+							});
+						});
+					});
+				}
+				else {
+					callback(null, {
+						response: false,
+						inconsistencies: inconsistencies,
+					});
+				}
+			}
+		});
 	}
 
-	function remove(object, callback) {
-		const id = object._id;
-
-		if (typeof(crud.options.updateValidation) === 'function') {
-			crud.options.deleteValidation(id, validated);
-		}
-		else {
-			validated();
-		}
-
-		function validated(err, inconsistencies) {
+	function update(object, user, callback) {
+		crud.authorize('update', object, user, function authorized(err, passed) {
 			if (err) {
 				callback(err);
 				return;
 			}
 
-			if (!inconsistencies || inconsistencies.length === 0) {
-				MongoClient.connect(crud.url, function listConnected(connectErr, db) {
-					if (connectErr) {
-						callback(connectErr);
-						return;
-					}
-
-					db.collection(crud.collection).deleteOne({
-						_id: id,
-					}, function deleted(dbErr, dbRes) {
-						if (dbErr) {
-							callback(dbErr);
-							return;
-						}
-						callback(null, {
-							response: dbRes.result.n === 1,
-						});
-					});
+			if (!passed) {
+				callback({
+					msg: 'not authorized',
 				});
+				return;
+			}
+
+			const model = object.model;
+
+			if (typeof(crud.options.updateValidation) === 'function') {
+				crud.options.updateValidation(model, validated);
 			}
 			else {
-				callback(null, {
-					response: false,
-					inconsistencies: inconsistencies,
-				});
+				validated();
 			}
-		}
+
+			function validated(errValidation, inconsistencies) {
+				if (errValidation) {
+					callback(errValidation);
+					return;
+				}
+
+				if (!inconsistencies || inconsistencies.length === 0) {
+					MongoClient.connect(crud.url, function listConnected(connectErr, db) {
+						if (connectErr) {
+							callback(connectErr);
+							return;
+						}
+
+						db.collection(crud.collection).updateOne({
+							_id: model._id,
+						}, model, function inserted(dbErr, dbRes) {
+							if (dbErr) {
+								callback(dbErr);
+								return;
+							}
+							callback(null, {
+								response: dbRes.result.n === 1,
+							});
+						});
+					});
+				}
+				else {
+					callback(null, {
+						response: false,
+						inconsistencies: inconsistencies,
+					});
+				}
+			}
+		});
 	}
 
-	function get(object, callback) {
-		list({filter: {_id: object._id}}, function got(err, docs) {
+	function remove(object, user, callback) {
+		crud.authorize('delete', object, user, function authorized(err, passed) {
+			if (err) {
+				callback(err);
+				return;
+			}
+
+			if (!passed) {
+				callback({
+					msg: 'not authorized',
+				});
+				return;
+			}
+
+			const id = object._id;
+
+			if (typeof(crud.options.updateValidation) === 'function') {
+				crud.options.deleteValidation(id, validated);
+			}
+			else {
+				validated();
+			}
+
+			function validated(errValidation, inconsistencies) {
+				if (errValidation) {
+					callback(errValidation);
+					return;
+				}
+
+				if (!inconsistencies || inconsistencies.length === 0) {
+					MongoClient.connect(crud.url, function listConnected(connectErr, db) {
+						if (connectErr) {
+							callback(connectErr);
+							return;
+						}
+
+						db.collection(crud.collection).deleteOne({
+							_id: id,
+						}, function deleted(dbErr, dbRes) {
+							if (dbErr) {
+								callback(dbErr);
+								return;
+							}
+							callback(null, {
+								response: dbRes.result.n === 1,
+							});
+						});
+					});
+				}
+				else {
+					callback(null, {
+						response: false,
+						inconsistencies: inconsistencies,
+					});
+				}
+			}
+		});
+	}
+
+	function get(object, user, callback) {
+		list({filter: {_id: object._id}}, user, function got(err, docs) {
 			if (err) {
 				callback(err);
 				return;
@@ -176,22 +244,36 @@ function MongoCrud(url, collection, options) {
 		});
 	}
 
-	function list(object, callback) {
-		const filter = object.filter;
-		MongoClient.connect(crud.url, function listConnected(err, db) {
+	function list(object, user, callback) {
+		crud.authorize('save', object, user, function authorized(err, passed) {
 			if (err) {
 				callback(err);
 				return;
 			}
 
-			db.collection(crud.collection).find(filter).toArray(function appFound(dbErr, docs) {
-				if (dbErr) {
-					callback(dbErr);
+			if (!passed) {
+				callback({
+					msg: 'not authorized',
+				});
+				return;
+			}
+
+			const filter = object.filter;
+			MongoClient.connect(crud.url, function listConnected(errDB, db) {
+				if (errDB) {
+					callback(errDB);
 					return;
 				}
 
-				callback(null, docs);
-				db.close();
+				db.collection(crud.collection).find(filter).toArray(function appFound(dbErr, docs) {
+					if (dbErr) {
+						callback(dbErr);
+						return;
+					}
+
+					callback(null, docs);
+					db.close();
+				});
 			});
 		});
 	}
